@@ -4,7 +4,11 @@ Monorepo for [Pi](https://github.com/earendil-works/pi-coding-agent) extensions.
 
 ## About Pi
 
-Pi is a minimal terminal coding harness — a programmable AI agent that runs in your terminal. Extend it with TypeScript [Extensions](https://github.com/earendil-works/pi-coding-agent#extensions), [Skills](https://github.com/earendil-works/pi-coding-agent#skills), [Prompt Templates](https://github.com/earendil-works/pi-coding-agent#prompt-templates), and [Themes](https://github.com/earendil-works/pi-coding-agent#themes). Package them together and share via npm or git.
+Pi is a minimal terminal coding harness — a programmable AI agent that runs in your terminal. You can extend it with TypeScript extensions, skills, prompt templates, and themes, then package and share them via npm or git.
+
+- **[pi.dev](https://pi.dev)** — official site
+- **[GitHub repo](https://github.com/earendil-works/pi-coding-agent)** — source, docs, and contributing guide
+- **[npm package](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)**
 
 This repo contains extensions built for Pi.
 
