@@ -68,7 +68,7 @@ function padC(c: string, w: number): string {
 }
 
 function saveRem(): void { if (timerStart === null) { resumeMs = currentMs; dbgMsg("save: no timer, full " + currentMs); return; } const e = Date.now() - timerStart; const r = Math.max(1000, currentMs - e); resumeMs = r; dbgMsg("save: " + r + "ms"); }
-function getMs(): number { if (resumeMs !== null) { const m = resumeMs; resumeMs = null; dbgMsg("resume: " + m + "ms"); return m; } dbgMsg("no resume val, using " + delayMs); return delayMs; }
+function getMs(): number { if (resumeMs !== null) { const m = resumeMs; resumeMs = null; dbgMsg("resume: " + m + "ms"); return m; } dbgMsg("Next prompt in " + (delayMs / 1000) + "s"); return delayMs; }
 function clrTimer(): void { if (timer === null) return; clearTimeout(timer); timer = null; timerStart = null; currentMs = delayMs; stopCI(); }
 function stopCI(): void { if (ciTimer === null) return; clearInterval(ciTimer); ciTimer = null; }
 function dbgMsg(m: string): void { if (statusCtx === null) return; statusCtx.ui.notify("[Q] " + m, "info"); }
@@ -186,6 +186,69 @@ function onEnd(pi: ExtensionAPI, e: { messages?: unknown[] }): void {
 }
 
 function onInput(): void { clrTimer(); waitQ = false; }
+
+// ============================================================================
+// Template expansion for queued slash commands
+// ============================================================================
+
+const PROMPTS_DIR = "/config/home/.pi/agent/prompts";
+
+interface TplFile { fm: Record<string, string>; body: string; }
+
+function stripFM(c: string): TplFile {
+	const m = c.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+	if (!m) return { fm: {}, body: c };
+	const fm: Record<string, string> = {};
+	for (const l of m[1]!.split("\n")) { const ci = l.indexOf(":"); if (ci === -1) continue; fm[l.slice(0, ci).trim()] = l.slice(ci + 1).trim(); }
+	return { fm, body: m[2] ?? "" };
+}
+
+function readTpl(name: string): TplFile | null {
+	const p = `${PROMPTS_DIR}/${name}.md`;
+	try { const fs = require("fs"); if (!fs.existsSync(p)) return null; return stripFM(fs.readFileSync(p, "utf-8")); }
+	catch (e) { return null; }
+}
+
+function expandBody(body: string, args: string[]): string {
+	const all = args.join(" ");
+	return body.replace(/\$(ARGUMENTS|@)/g, all).replace(/\$(\d+)/g, (_, n) => args[parseInt(n, 10) - 1] ?? "");
+}
+
+function expandChain(text: string): string[] | null {
+	const m = text.match(/^\/([^\s]+)(?:\s+(.*))?$/);
+	if (!m) return null;
+	const name = m[1]!, argText = m[2] ?? "";
+	const args = argText.split(/\s+/).filter(a => a.length > 0);
+	const tpl = readTpl(name);
+	if (!tpl || !tpl.fm.chain) return null;
+	const steps = tpl.fm.chain.split("->").map(s => s.trim());
+	const exp: string[] = [];
+	for (const s of steps) { const st = readTpl(s); if (st && st.body.trim().length > 0) exp.push(expandBody(st.body, args)); }
+	return exp.length > 0 ? exp : null;
+}
+
+function expandCmd(text: string): string | null {
+	const m = text.match(/^\/([^\s]+)(?:\s+(.*))?$/);
+	if (!m) return null;
+	const name = m[1]!, argText = m[2] ?? "";
+	const args = argText.split(/\s+/).filter(a => a.length > 0);
+	const tpl = readTpl(name);
+	if (!tpl || tpl.fm.chain) return null;
+	if (tpl.body.trim().length === 0) return null;
+	return expandBody(tpl.body, args);
+}
+
+function expandAndAddItems(text: string): void {
+	if (!text.startsWith("/")) { addItem(text); return; }
+	addExpandedItems(text);
+}
+
+function addExpandedItems(text: string): void {
+	const chain = expandChain(text);
+	if (chain) { for (const s of chain) { addItem(s); } return; }
+	const exp = expandCmd(text);
+	addItem(exp ?? text);
+}
 
 // ============================================================================
 // Parse args
@@ -471,7 +534,7 @@ function doDelayAdj(pi: ExtensionAPI, delta: number): void {
 }
 
 function buildCB(pi: ExtensionAPI, onDone: () => void): OverlayCB {
-	return { onAdd: (t) => { addItem(t); persist(pi); compReset(); startTimer(pi); updStatus(); }, onRemove: (id) => { rmItem(id); persist(pi); compReset(); updStatus(); }, onClear: () => { drainQ(); persist(pi); compReset(); updStatus(); }, onTogglePause: () => { if (!paused) saveRem(); flipP(); persist(pi); syncTimer(pi); }, onNextNow: () => { clrTimer(); doNow(pi); }, onClose: onDone, onStateChanged: () => { persist(pi); }, onAdjustDelay: (d) => { doDelayAdj(pi, d); }, onSetDelay: (s) => { doSetDelay(pi, s); } };
+	return { onAdd: (t) => { expandAndAddItems(t); persist(pi); compReset(); startTimer(pi); updStatus(); }, onRemove: (id) => { rmItem(id); persist(pi); compReset(); updStatus(); }, onClear: () => { drainQ(); persist(pi); compReset(); updStatus(); }, onTogglePause: () => { if (!paused) saveRem(); flipP(); persist(pi); syncTimer(pi); }, onNextNow: () => { clrTimer(); doNow(pi); }, onClose: onDone, onStateChanged: () => { persist(pi); }, onAdjustDelay: (d) => { doDelayAdj(pi, d); }, onSetDelay: (s) => { doSetDelay(pi, s); } };
 }
 
 // ============================================================================
@@ -505,7 +568,10 @@ function regAgent(pi: ExtensionAPI): void {
 	pi.on("agent_start", async () => { agentBusy = true; clrTimer(); });
 	pi.on("agent_end", async (event) => onEnd(pi, event));
 	pi.on("input", async (event) => {
-		if (event.source !== "interactive") return { action: "continue" as const };
+		if (event.source !== "interactive") {
+			if (event.text?.startsWith("/")) { const exp = expandCmd(event.text); if (exp !== null) return { action: "transform", text: exp }; }
+			return { action: "continue" as const };
+		}
 		onInput();
 		return { action: "continue" as const };
 	});
@@ -515,7 +581,7 @@ function regAgent(pi: ExtensionAPI): void {
 // Command handlers
 // ============================================================================
 
-function addViaCmd(pi: ExtensionAPI, text: string): void { addItem(text); persist(pi); freshRender(); startTimer(pi); updStatus(); }
+function addViaCmd(pi: ExtensionAPI, text: string): void { expandAndAddItems(text); persist(pi); freshRender(); startTimer(pi); updStatus(); }
 function updStatus(): void { if (statusCtx === null) return; us2(); }
 function us2(): void { const c = queue.length; if (c === 0) { statusCtx.ui.setStatus("pq", undefined); return; } const s = timerRem(); const label = statusCtx.ui.theme.fg("accent", `Queue:${c} ${s}s`); statusCtx.ui.setStatus("pq", label); }
 function timerRem(): number { if (timerStart === null) return currentMs / 1000; return tr2(); }
@@ -613,7 +679,7 @@ function parseDelaySec(secStr: string): number | undefined {
 
 function isBadDelay(sec: number): boolean { if (sec < 1) return true; return false; }
 
-function applyDelay(pi: ExtensionAPI, sec: number): void { delayMs = sec * 1000; resumeMs = null; clrTimer(); tryStartTimer(pi); }
+function applyDelay(pi: ExtensionAPI, sec: number): void { delayMs = sec * 1000; resumeMs = null; clrTimer(); tryStartTimer(pi); persist(pi); }
 
 function tryStartTimer(pi: ExtensionAPI): void { if (paused) return; tst2(pi); }
 function tst2(pi: ExtensionAPI): void { if (queue.length === 0) return; startTimer(pi); }
