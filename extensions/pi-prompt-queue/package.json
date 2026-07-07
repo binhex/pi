@@ -1,6 +1,6 @@
 {
   "name": "pi-prompt-queue",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Pi extension — queue prompts that auto-fire after the agent finishes",
   "keywords": [
     "pi-package",

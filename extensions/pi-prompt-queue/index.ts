@@ -131,7 +131,7 @@ function killPanel(): void { panelOpen = false; panelClose = null; panelRender =
 // ============================================================================
 
 function fireNext(pi: ExtensionAPI): void { if (paused) return; fn2(pi); }
-function fn2(pi: ExtensionAPI): void { if (queue.length === 0) return; const item = queue.shift()!; persist(pi); freshRender(); updStatus(); pi.sendUserMessage(item.prompt); }
+function fn2(pi: ExtensionAPI): void { if (queue.length === 0) return; const item = queue.shift()!; persist(pi); freshRender(); updStatus(); pi.sendUserMessage(item.prompt, { deliverAs: "followUp" }); }
 
 function startTimer(pi: ExtensionAPI): void { clrTimer(); if (paused) return; if (agentBusy) return; stT2(pi); }
 function stT2(pi: ExtensionAPI): void { if (queue.length === 0) return; const ms = getMs(); currentMs = ms; startCI(); timer = setTimeout(() => { timer = null; timerStart = null; stopCI(); tmrFire(pi); }, ms); }
@@ -453,7 +453,7 @@ function doNow(pi: ExtensionAPI): void {
 	const item = queue.shift()!;
 	persist(pi);
 	compReset();
-	pi.sendUserMessage(item.prompt);
+	pi.sendUserMessage(item.prompt, { deliverAs: "followUp" });
 }
 
 
@@ -559,7 +559,7 @@ function cmdRemove(pi: ExtensionAPI, ctx: ExtensionCommandContext, parts: string
 
 function cmdClear(pi: ExtensionAPI, ctx: ExtensionCommandContext): void { drainQ(); persist(pi); freshRender(); updStatus(); ctx.ui.notify("Queue cleared", "info"); }
 
-function cmdNext(pi: ExtensionAPI, ctx: ExtensionCommandContext): void { clrTimer(); if (agentBusy) { ctx.ui.notify("Agent is busy — cannot trigger now", "warning"); return; } if (queue.length === 0) { ctx.ui.notify("Queue is empty", "warning"); return; } const item = queue.shift()!; persist(pi); freshRender(); updStatus(); pi.sendUserMessage(item.prompt); ctx.ui.notify(`Triggered: "${truncT(item.prompt, 50)}" (${queue.length} remaining)`, "info"); }
+function cmdNext(pi: ExtensionAPI, ctx: ExtensionCommandContext): void { clrTimer(); if (agentBusy) { ctx.ui.notify("Agent is busy — cannot trigger now", "warning"); return; } if (queue.length === 0) { ctx.ui.notify("Queue is empty", "warning"); return; } const item = queue.shift()!; persist(pi); freshRender(); updStatus(); pi.sendUserMessage(item.prompt, { deliverAs: "followUp" }); ctx.ui.notify(`Triggered: "${truncT(item.prompt, 50)}" (${queue.length} remaining)`, "info"); }
 
 function cmdPause(pi: ExtensionAPI, ctx: ExtensionCommandContext): void { setP(true); clrTimer(); persist(pi); freshRender(); updStatus(); ctx.ui.notify("Auto-advance paused", "info"); }
 

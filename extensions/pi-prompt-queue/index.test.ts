@@ -96,8 +96,9 @@ describe("prompt queue extension", () => {
 
 		vi.advanceTimersByTime(6000);
 
-		// Timer should fire now that agent is idle
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("test prompt");
+		// Timer should fire now that agent is idle — must use deliverAs followUp so
+		// the Pi runtime queues the message instead of throwing if agent is streaming
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("test prompt", { deliverAs: "followUp" });
 	});
 
 	it("should start timer immediately when adding items while agent is idle", async () => {
@@ -110,7 +111,7 @@ describe("prompt queue extension", () => {
 		// Timer was started immediately; advance past delay
 		vi.advanceTimersByTime(6000);
 
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("idle prompt");
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("idle prompt", { deliverAs: "followUp" });
 	});
 
 	it("should clear pending timer when agent starts processing", async () => {
@@ -138,7 +139,7 @@ describe("prompt queue extension", () => {
 		vi.advanceTimersByTime(6000);
 
 		// The /q command strips the first token ("add"), so the text is "prompt one"
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("prompt one");
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("prompt one", { deliverAs: "followUp" });
 	});
 
 	it("should not start timer when resuming from pause while agent is busy", async () => {
@@ -170,7 +171,7 @@ describe("prompt queue extension", () => {
 		vi.advanceTimersByTime(6000);
 
 		// Now the item should be sent
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("paused prompt");
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("paused prompt", { deliverAs: "followUp" });
 	});
 
 	it("should auto-advance through multiple queued items", async () => {
@@ -187,7 +188,7 @@ describe("prompt queue extension", () => {
 		});
 
 		vi.advanceTimersByTime(6000);
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("first");
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("first", { deliverAs: "followUp" });
 
 		// Second agent_end
 		await triggerEvent(pi, "agent_end", {
@@ -196,7 +197,7 @@ describe("prompt queue extension", () => {
 		});
 
 		vi.advanceTimersByTime(6000);
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("second");
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("second", { deliverAs: "followUp" });
 
 		// Third agent_end
 		await triggerEvent(pi, "agent_end", {
@@ -205,6 +206,39 @@ describe("prompt queue extension", () => {
 		});
 
 		vi.advanceTimersByTime(6000);
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("third");
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("third", { deliverAs: "followUp" });
+	});
+
+	it("should use deliverAs followUp when /q next is called while agent is busy", async () => {
+		// Agent busy
+		await triggerEvent(pi, "agent_start", { type: "agent_start" });
+
+		const cmd = getCmdHandler(pi, "q");
+		expect(cmd).toBeDefined();
+		const ctx = createMockCtx();
+
+		// First add some items
+		await cmd!("add item one", ctx);
+		await cmd!("add item two", ctx);
+
+		// Try /q next while agent is busy — should show warning, not send
+		await cmd!("next", ctx);
+
+		expect(pi.sendUserMessage).not.toHaveBeenCalled();
+		expect(ctx.ui.notify).toHaveBeenCalledWith(
+			"Agent is busy — cannot trigger now",
+			"warning",
+		);
+
+		// Agent finishes
+		await triggerEvent(pi, "agent_end", {
+			type: "agent_end",
+			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
+		});
+
+		vi.advanceTimersByTime(6000);
+
+		// First item should be sent with followUp
+		expect(pi.sendUserMessage).toHaveBeenCalledWith("item one", { deliverAs: "followUp" });
 	});
 });
