@@ -1,244 +1,237 @@
 /**
  * Prompt Queue Extension — Tests
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import promptQueueExtension from "./index";
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import promptQueueExtension from './index';
 
 // ── Test helpers ────────────────────────────────────────────────
 
 interface EventMap {
-	[k: string]: Array<(...args: unknown[]) => unknown>;
+  [k: string]: Array<(...args: unknown[]) => unknown>;
 }
 
 function createMockPI() {
-	const handlers: EventMap = {};
-	const commands = new Map<string, Function>();
+  const handlers: EventMap = {};
+  const commands = new Map<string, Function>();
 
-	return {
-		on: vi.fn((event: string, handler: (...args: unknown[]) => unknown) => {
-			if (!handlers[event]) handlers[event] = [];
-			handlers[event]!.push(handler);
-		}),
-		sendUserMessage: vi.fn(),
-		appendEntry: vi.fn(),
-		registerCommand: vi.fn((name: string, opts: { handler: Function }) => {
-			commands.set(name, opts.handler);
-		}),
-		registerShortcut: vi.fn(),
-		// Test access
-		_handlers: handlers,
-		_commands: commands,
-	};
+  return {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => unknown) => {
+      if (!handlers[event]) handlers[event] = [];
+      handlers[event]!.push(handler);
+    }),
+    sendUserMessage: vi.fn(),
+    appendEntry: vi.fn(),
+    registerCommand: vi.fn((name: string, opts: { handler: Function }) => {
+      commands.set(name, opts.handler);
+    }),
+    registerShortcut: vi.fn(),
+    // Test access
+    _handlers: handlers,
+    _commands: commands,
+  };
 }
 
 function createMockCtx() {
-	return {
-		ui: {
-			notify: vi.fn(),
-			setStatus: vi.fn(),
-			theme: { fg: vi.fn(() => "") },
-		},
-	};
+  return {
+    ui: {
+      notify: vi.fn(),
+      setStatus: vi.fn(),
+      theme: { fg: vi.fn(() => '') },
+    },
+  };
 }
 
-async function triggerEvent(
-	pi: ReturnType<typeof createMockPI>,
-	event: string,
-	data: unknown,
-): Promise<void> {
-	const hs = pi._handlers[event];
-	if (!hs) return;
-	for (const h of hs) {
-		await h(data, createMockCtx());
-	}
+async function triggerEvent(pi: ReturnType<typeof createMockPI>, event: string, data: unknown): Promise<void> {
+  const hs = pi._handlers[event];
+  if (!hs) return;
+  for (const h of hs) {
+    await h(data, createMockCtx());
+  }
 }
 
 function getCmdHandler(
-	pi: ReturnType<typeof createMockPI>,
-	name: string,
+  pi: ReturnType<typeof createMockPI>,
+  name: string,
 ): ((args: string, ctx: unknown) => Promise<void>) | undefined {
-	return pi._commands.get(name) as ((args: string, ctx: unknown) => Promise<void>) | undefined;
+  return pi._commands.get(name) as ((args: string, ctx: unknown) => Promise<void>) | undefined;
 }
 
 // ── Tests ───────────────────────────────────────────────────────
 
-describe("prompt queue extension", () => {
-	let pi: ReturnType<typeof createMockPI>;
+describe('prompt queue extension', () => {
+  let pi: ReturnType<typeof createMockPI>;
 
-	beforeEach(() => {
-		vi.useFakeTimers();
-		pi = createMockPI();
-		promptQueueExtension(pi);
-	});
+  beforeEach(() => {
+    vi.useFakeTimers();
+    pi = createMockPI();
+    promptQueueExtension(pi);
+  });
 
-	afterEach(() => {
-		vi.useRealTimers();
-	});
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-	it("should not fire the auto-advance timer while the agent is busy", async () => {
-		await triggerEvent(pi, "agent_start", { type: "agent_start" });
+  it('should not fire the auto-advance timer while the agent is busy', async () => {
+    await triggerEvent(pi, 'agent_start', { type: 'agent_start' });
 
-		const cmd = getCmdHandler(pi, "q");
-		expect(cmd).toBeDefined();
-		const ctx = createMockCtx();
-		await cmd!("add test prompt", ctx);
+    const cmd = getCmdHandler(pi, 'q');
+    expect(cmd).toBeDefined();
+    const ctx = createMockCtx();
+    await cmd!('add test prompt', ctx);
 
-		vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(6000);
 
-		// Timer should NOT fire while agent is busy
-		expect(pi.sendUserMessage).not.toHaveBeenCalled();
+    // Timer should NOT fire while agent is busy
+    expect(pi.sendUserMessage).not.toHaveBeenCalled();
 
-		// Now agent finishes
-		await triggerEvent(pi, "agent_end", {
-			type: "agent_end",
-			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
-		});
+    // Now agent finishes
+    await triggerEvent(pi, 'agent_end', {
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Done.' }] }],
+    });
 
-		vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(6000);
 
-		// Timer should fire now that agent is idle — must use deliverAs followUp so
-		// the Pi runtime queues the message instead of throwing if agent is streaming
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("test prompt", { deliverAs: "followUp" });
-	});
+    // Timer should fire now that agent is idle — must use deliverAs followUp so
+    // the Pi runtime queues the message instead of throwing if agent is streaming
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('test prompt', { deliverAs: 'followUp' });
+  });
 
-	it("should start timer immediately when adding items while agent is idle", async () => {
-		const cmd = getCmdHandler(pi, "q");
-		expect(cmd).toBeDefined();
-		const ctx = createMockCtx();
+  it('should start timer immediately when adding items while agent is idle', async () => {
+    const cmd = getCmdHandler(pi, 'q');
+    expect(cmd).toBeDefined();
+    const ctx = createMockCtx();
 
-		await cmd!("add idle prompt", ctx);
+    await cmd!('add idle prompt', ctx);
 
-		// Timer was started immediately; advance past delay
-		vi.advanceTimersByTime(6000);
+    // Timer was started immediately; advance past delay
+    vi.advanceTimersByTime(6000);
 
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("idle prompt", { deliverAs: "followUp" });
-	});
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('idle prompt', { deliverAs: 'followUp' });
+  });
 
-	it("should clear pending timer when agent starts processing", async () => {
-		const cmd = getCmdHandler(pi, "q");
-		expect(cmd).toBeDefined();
-		const ctx = createMockCtx();
+  it('should clear pending timer when agent starts processing', async () => {
+    const cmd = getCmdHandler(pi, 'q');
+    expect(cmd).toBeDefined();
+    const ctx = createMockCtx();
 
-		// Add items while idle — timer starts
-		await cmd!("add prompt one", ctx);
+    // Add items while idle — timer starts
+    await cmd!('add prompt one', ctx);
 
-		// Agent starts before timer fires
-		await triggerEvent(pi, "agent_start", { type: "agent_start" });
+    // Agent starts before timer fires
+    await triggerEvent(pi, 'agent_start', { type: 'agent_start' });
 
-		// Advance past the original delay — timer was cancelled
-		vi.advanceTimersByTime(6000);
+    // Advance past the original delay — timer was cancelled
+    vi.advanceTimersByTime(6000);
 
-		expect(pi.sendUserMessage).not.toHaveBeenCalled();
+    expect(pi.sendUserMessage).not.toHaveBeenCalled();
 
-		// Agent finishes — timer should restart
-		await triggerEvent(pi, "agent_end", {
-			type: "agent_end",
-			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
-		});
+    // Agent finishes — timer should restart
+    await triggerEvent(pi, 'agent_end', {
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Done.' }] }],
+    });
 
-		vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(6000);
 
-		// The /q command strips the first token ("add"), so the text is "prompt one"
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("prompt one", { deliverAs: "followUp" });
-	});
+    // The /q command strips the first token ("add"), so the text is "prompt one"
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('prompt one', { deliverAs: 'followUp' });
+  });
 
-	it("should not start timer when resuming from pause while agent is busy", async () => {
-		// Agent busy
-		await triggerEvent(pi, "agent_start", { type: "agent_start" });
+  it('should not start timer when resuming from pause while agent is busy', async () => {
+    // Agent busy
+    await triggerEvent(pi, 'agent_start', { type: 'agent_start' });
 
-		// Add item — no timer (agent busy)
-		const ctx = createMockCtx();
+    // Add item — no timer (agent busy)
+    const ctx = createMockCtx();
 
-		// Simulate /q pause then /q resume
-		const cmd = getCmdHandler(pi, "q");
-		expect(cmd).toBeDefined();
+    // Simulate /q pause then /q resume
+    const cmd = getCmdHandler(pi, 'q');
+    expect(cmd).toBeDefined();
 
-		await cmd!("add paused prompt", ctx);
-		await cmd!("pause", ctx);
-		await cmd!("resume", ctx);
+    await cmd!('add paused prompt', ctx);
+    await cmd!('pause', ctx);
+    await cmd!('resume', ctx);
 
-		vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(6000);
 
-		// Timer should NOT fire — agent is still busy
-		expect(pi.sendUserMessage).not.toHaveBeenCalled();
+    // Timer should NOT fire — agent is still busy
+    expect(pi.sendUserMessage).not.toHaveBeenCalled();
 
-		// Agent finishes
-		await triggerEvent(pi, "agent_end", {
-			type: "agent_end",
-			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
-		});
+    // Agent finishes
+    await triggerEvent(pi, 'agent_end', {
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Done.' }] }],
+    });
 
-		vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(6000);
 
-		// Now the item should be sent
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("paused prompt", { deliverAs: "followUp" });
-	});
+    // Now the item should be sent
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('paused prompt', { deliverAs: 'followUp' });
+  });
 
-	it("should auto-advance through multiple queued items", async () => {
-		const ctx = createMockCtx();
-		const cmd = getCmdHandler(pi, "q");
-		expect(cmd).toBeDefined();
+  it('should auto-advance through multiple queued items', async () => {
+    const ctx = createMockCtx();
+    const cmd = getCmdHandler(pi, 'q');
+    expect(cmd).toBeDefined();
 
-		await cmd!("add first ;; second ;; third", ctx);
+    await cmd!('add first ;; second ;; third', ctx);
 
-		// First agent_end (agent becomes idle)
-		await triggerEvent(pi, "agent_end", {
-			type: "agent_end",
-			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
-		});
+    // First agent_end (agent becomes idle)
+    await triggerEvent(pi, 'agent_end', {
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Done.' }] }],
+    });
 
-		vi.advanceTimersByTime(6000);
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("first", { deliverAs: "followUp" });
+    vi.advanceTimersByTime(6000);
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('first', { deliverAs: 'followUp' });
 
-		// Second agent_end
-		await triggerEvent(pi, "agent_end", {
-			type: "agent_end",
-			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
-		});
+    // Second agent_end
+    await triggerEvent(pi, 'agent_end', {
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Done.' }] }],
+    });
 
-		vi.advanceTimersByTime(6000);
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("second", { deliverAs: "followUp" });
+    vi.advanceTimersByTime(6000);
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('second', { deliverAs: 'followUp' });
 
-		// Third agent_end
-		await triggerEvent(pi, "agent_end", {
-			type: "agent_end",
-			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
-		});
+    // Third agent_end
+    await triggerEvent(pi, 'agent_end', {
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Done.' }] }],
+    });
 
-		vi.advanceTimersByTime(6000);
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("third", { deliverAs: "followUp" });
-	});
+    vi.advanceTimersByTime(6000);
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('third', { deliverAs: 'followUp' });
+  });
 
-	it("should use deliverAs followUp when /q next is called while agent is busy", async () => {
-		// Agent busy
-		await triggerEvent(pi, "agent_start", { type: "agent_start" });
+  it('should use deliverAs followUp when /q next is called while agent is busy', async () => {
+    // Agent busy
+    await triggerEvent(pi, 'agent_start', { type: 'agent_start' });
 
-		const cmd = getCmdHandler(pi, "q");
-		expect(cmd).toBeDefined();
-		const ctx = createMockCtx();
+    const cmd = getCmdHandler(pi, 'q');
+    expect(cmd).toBeDefined();
+    const ctx = createMockCtx();
 
-		// First add some items
-		await cmd!("add item one", ctx);
-		await cmd!("add item two", ctx);
+    // First add some items
+    await cmd!('add item one', ctx);
+    await cmd!('add item two', ctx);
 
-		// Try /q next while agent is busy — should show warning, not send
-		await cmd!("next", ctx);
+    // Try /q next while agent is busy — should show warning, not send
+    await cmd!('next', ctx);
 
-		expect(pi.sendUserMessage).not.toHaveBeenCalled();
-		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Agent is busy — cannot trigger now",
-			"warning",
-		);
+    expect(pi.sendUserMessage).not.toHaveBeenCalled();
+    expect(ctx.ui.notify).toHaveBeenCalledWith('Agent is busy — cannot trigger now', 'warning');
 
-		// Agent finishes
-		await triggerEvent(pi, "agent_end", {
-			type: "agent_end",
-			messages: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
-		});
+    // Agent finishes
+    await triggerEvent(pi, 'agent_end', {
+      type: 'agent_end',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'Done.' }] }],
+    });
 
-		vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(6000);
 
-		// First item should be sent with followUp
-		expect(pi.sendUserMessage).toHaveBeenCalledWith("item one", { deliverAs: "followUp" });
-	});
+    // First item should be sent with followUp
+    expect(pi.sendUserMessage).toHaveBeenCalledWith('item one', { deliverAs: 'followUp' });
+  });
 });
