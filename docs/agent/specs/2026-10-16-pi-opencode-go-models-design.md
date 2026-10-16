@@ -1,10 +1,23 @@
 # pi-opencode-go-models design specification
 
-**Status:** Approved design
+**Status:** Cancelled — not to be implemented
 **Date:** 2026-10-16
 **Repository:** `/data/pi`
-**Target package:** `extensions/pi-opencode-go-models`
+**Target package:** `extensions/pi-opencode-go-models` (never created)
 **Pi version inspected:** 1.3.0
+
+> **Cancellation note.** Cancelled at design review. The extension would have
+> synced retired model generations that OpenCode's documentation and pricing
+> table have already dropped: `glm-5.1`, `grok-4.6`, `kimi-k2.6`,
+> `minimax-m2.5`, `minimax-m2.7`, `qwen3.6-plus`, and `qwen3.7-max` all have a
+> current replacement in the documented list. The stated goal was to pick up
+> new models sooner, and that goal is unachievable this way: pi.dev's
+> `opencode-go` catalogue is byte-identical to the documented Go list, so
+> there is no lag for an extension to close. The original motivating model,
+> `deepseek-v4.1-flash-free`, remains unreachable regardless of tooling
+> because OpenCode gates its free tier server-side. The design below is
+> retained as a record of the verified endpoint, catalogue, and gating
+> behaviour.
 
 ## 1. Problem and purpose
 
