@@ -17,3 +17,4 @@ This repo contains extensions built for Pi.
 | Extension | Description |
 |---|---|
 | [pi-prompt-queue](./extensions/pi-prompt-queue) | Queue prompts that auto-fire after the agent finishes its current work |
+| [pi-subagent-monitor](./extensions/pi-subagent-monitor) | Monitor subagent workflow time, activity, usage, and safety limits |
