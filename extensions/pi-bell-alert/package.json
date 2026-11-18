@@ -1,0 +1,26 @@
+{
+  "name": "pi-bell-alert",
+  "version": "0.1.0",
+  "description": "Pi extension — audible terminal bell when Pi needs you, quiet while background subagents run",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "bell",
+    "notification",
+    "subagents"
+  ],
+  "license": "MIT",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "index.ts",
+    "README.md",
+    ".prettierrc"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
